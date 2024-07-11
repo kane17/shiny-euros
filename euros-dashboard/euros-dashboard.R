@@ -8,7 +8,8 @@ library(jsonlite)
 library(dplyr)
 library(DT)
 library(httr)
-# reset environment
+library(tidyverse)
+library(ggplot2)
 
 
 
@@ -21,138 +22,40 @@ json_data <- data.frame()
 json_data <- content(response, "text")
 euro2024_data <- fromJSON(json_data)
 str(euro2024_data)
-summary(euro2024_data)
-euro2024_data$rounds
 
-str(euro2024_data)
-seq(nrow(euro2024_data$rounds))
-
-euro2024_data$rounds[["matches"]]
-
-
-print(euro2024_data$rounds[[1]])
-# Accessing a list item using the $ operator
-euro2024_data$rounds[[1]]
-
-# Accessing a list item using the double square brackets notation
-euro2024_data[["rounds"]][["name"]][[1]]
-# THIS WORKS HELL YEAH
-# first iterate through the rounds
-
-# define the data frame
-# df <- data.frame("Matchday", "Date", "Time", "Team 1", "Team 2", "Score (FT)", "Score (HT)", "Goals Team 1", "Goals Team 2", "Group")
-
-df <- data.frame()
-for (i in seq_len(nrow(euro2024_data$rounds))) {
-
-  round <- euro2024_data$rounds$matches[i]
-  #print(matches)
-
-  str(round)
-
-  for (j in seq_len(nrow(round))) {
-    match <- round[j]
-    print(match)
-    # loop through each match in the round
-    # for (j in seq_len(nrow(matches))) {
-    #   # extract match data
-    #   match <- matches[j]
-    #   print(match)
-    #   match_data <- c(
-    #     euro2024_data$rounds$name[i],
-    #     match$date,
-    #     match$time,
-    #     match$team1$name,
-    #     match$team2$name,
-    #     paste(match$score$ft),
-    #     paste(match$score$ht),
-    #     # paste the goal scorers for each team
-    #     paste(
-    #       sapply(match$goals1, function(g) paste(g$name, "(", g$minute, ".)", sep = "")),
-    #       collapse = ", "
-    #     ),
-    #     paste(
-    #       sapply(match$goals2, function(g) paste(g$name, "(", g$minute, ".)", sep = "")),
-    #       collapse = ", "
-    #     ),
-    #     match$group
-    #   )
-    #   # add match data to the data frame
-    #   df <- rbind(df, match_data)
-    #   # clear match_data
-    #   match_data <- NULL
-    # }
-
-    # make sure that match_data is a unique object for each match
-
-
-    # print(match_data)
-    # add match data to the data frame
-    #df <- rbind(df, match_data)
-  }
-
-
-}
-
-head(df)
-
-print(df)
-
-
-# Function to extract match data from a round
-extract_matches <- function(round) {
-  matches <- round$matches
-  round_name <- round$name
+matches <- bind_rows(lapply(1:nrow(euro2024_data$rounds), function(i) {
+  round_name <- euro2024_data$rounds$name[i]
+  round_matches <- euro2024_data$rounds$matches[[i]]
   
-  matches_df <- bind_rows(lapply(matches, function(match) {
-    # Check for existence of nested fields
-    goals1 <- if (!is.null(match$goals1)) sapply(match$goals1, function(g) paste(g$name, collapse = ", ")) else NA
-    goals2 <- if (!is.null(match$goals2)) sapply(match$goals2, function(g) paste(g$name, collapse = ", ")) else NA
-    
-    data.frame(
-      round = round_name,
-      num = match$num,
-      date = match$date,
-      time = match$time,
-      team1 = match$team1$name,
-      code_team1 = match$team1$code,
-      team2 = match$team2$name,
-      code_team2 = match$team2$code,
-      score_ft = paste(match$score$ft, collapse = "-"),
-      score_ht = paste(match$score$ht, collapse = "-"),
-      goals_team1 = ifelse(is.na(goals1), "", goals1),
-      goals_team2 = ifelse(is.na(goals2), "", goals2),
-      group = match$group,
-      stringsAsFactors = FALSE
-    )
-  }))
+  # Print the round data for debugging
+  print(paste("Processing round:", round_name))
+  print(round_matches)
   
-  return(matches_df)
-}
-
-# Extract matches from all rounds and combine into a single data frame
-all_matches_df <- bind_rows(lapply(euro2024_data$rounds, extract_matches))
-
-
-# View the combined data frame
-print(all_matches_df)
-
-
-# Print the match list
-print(match_list)
-
-
-
-# Extract match data
-matches <- bind_rows(lapply(euro2024_data$rounds, function(round) {
-  round_name <- round[["name"]]
-  round_matches <- round[["matches"]]
-  lapply(round_matches, function(match) {
-    match$round <- round_name
-    match
-  })
+  # Add the round name to each match
+  round_matches$round <- round_name
+  round_matches
 }))
 
+
+# TODO:
+# - Implement a reactive element (e.g. plot for each nation)
+# - Implement a map with match locations
+
+# Prepare data for plotting goals per matchday
+goals_per_matchday <- matches %>%
+    mutate(goals_team1 = map_int(goals1, ~ if (is.data.frame(.x)) nrow(.x) else 0),
+           goals_team2 = map_int(goals2, ~ if (is.data.frame(.x)) nrow(.x) else 0)) %>%
+    select(round, team1, team2, goals_team1, goals_team2) %>%
+    pivot_longer(cols = c(goals_team1, goals_team2), names_to = "goal_type", values_to = "goals") %>%
+    pivot_longer(cols = c(team1, team2), names_to = "team_type", values_to = "team") %>%
+    filter((goal_type == "goals_team1" & team_type == "team1") | 
+           (goal_type == "goals_team2" & team_type == "team2")) %>%
+    select(round, team, goals) %>%
+    group_by(round, team) %>%
+    summarise(goals = sum(goals)) %>%
+    ungroup()
+
+print(goals_per_matchday, n = 200)
 
 
 
@@ -161,6 +64,7 @@ ui <- dashboardPage(
   dashboardSidebar(
     sidebarMenu(
       menuItem("Matches", tabName = "matches", icon = icon("table")),
+      menuItem("Goals Scored", tabName = "goals", icon = icon("futbol")),
       menuItem("Match Map", tabName = "map", icon = icon("globe"))
     )
   ),
@@ -175,34 +79,32 @@ ui <- dashboardPage(
               fluidRow(
                 box(title = "Match Locations", width = 12, 
                     leafletOutput("match_map", height = 500))
-              ))
+              )),
+      tabItem(tabName = "goals",
+              fluidRow(
+                box(title = "Goals Scored Per Matchday", width = 12, 
+                    plotOutput("goals_plot")),
+                box(title = "Select Team", width = 4,
+                    selectInput("team", "Team:", choices = c("All Teams", unique(matches$team1), unique(matches$team2))))))
     )
   )
 )
 
 server <- function(input, output) {
-
-  print(class(matches))
-  print(str(matches))
-  
-  # Ensure matches is a data frame before proceeding
-  if (!inherits(matches, "data.frame")) {
-    stop("The 'matches' object is not a data frame.")
-  }
-  # Prepare match data for display
   matches_df <- matches %>%
     mutate(date = as.Date(date),
-           team1 = sapply(team1, function(x) x$name),
-           team2 = sapply(team2, function(x) x$name),
-           score = sapply(score$ft, function(x) paste(x, collapse = "-")),
-           goals1 = sapply(goals1, function(x) paste(sapply(x, function(y) y$name), collapse = ", ")),
-           goals2 = sapply(goals2, function(x) paste(sapply(x, function(y) y$name), collapse = ", "))) %>%
+            team1 = sapply(team1$name, identity),
+            team2 = sapply(team2$name, identity),
+            score = sapply(score$ft, function(x) paste(x, collapse = "-")),
+            goals1 = sapply(goals1, function(x) paste(sapply(x$name, identity), collapse = ", ")),
+            goals2 = sapply(goals2, function(x) paste(sapply(x$name, identity), collapse = ", "))) %>%
     select(round, date, team1, team2, score, goals1, goals2)
-  
+
   output$matches_table <- DT::renderDataTable({
     DT::datatable(matches_df, options = list(pageLength = 10))
   })
-  
+
+
   output$match_map <- renderLeaflet({
     # Sample data for match locations (update with actual data if available)
     match_data <- data.frame(
@@ -214,76 +116,51 @@ server <- function(input, output) {
       addTiles() %>%
       addMarkers(~lng, ~lat, popup = ~location)
   })
-}
 
+  # Reactive expression to filter goals data based on selected team
+  filtered_goals <- reactive({
+    req(input$team)  # Ensure input$team is available
+    
+    # Debugging print to check input$team value
+    print(paste("Selected Team:", input$team))
+    
+    if (input$team == "All Teams") {
+      goals_per_matchday %>%
+        group_by(round) %>%
+        summarise(goals = sum(goals)) %>%
+        ungroup()
+    } else {
+      filtered_data <- goals_per_matchday %>%
+        filter(team$name == input$team) %>%
+        group_by(round) %>%
+        summarise(goals = sum(goals)) %>%
+        ungroup()
+      
+      # Debugging print to check filtered data
+      print("Filtered Goals Data:")
+      print(filtered_data)
+      
+      filtered_data
+    }
+  })
+
+
+  # Render the goals per matchday plot
+  output$goals_plot <- renderPlot({
+    plot_data <- filtered_goals()
+    
+    # Check if plot_data is empty
+    if (nrow(plot_data) == 0) {
+      return(NULL)
+    }
+    
+    ggplot(plot_data, aes(x = round, y = goals)) +
+      geom_bar(stat = "identity") +
+      labs(title = "Goals Scored Per Matchday",
+           x = "Matchday",
+           y = "Goals") +
+      theme_minimal()
+  })
+}
 # Run the app
 shinyApp(ui, server)
-
-
-
-
-
-
-
-
-
-
-
-  # for (match in matches) {
-  #   match_data <- c(
-  #     euro2024_data$rounds$name[i],
-  #     match$date,
-  #     match$time,
-  #     match$team1$name,
-  #     match$team2$name,
-  #     paste(match$score$ft),
-  #     paste(match$score$ht),
-  #     # paste the goal scorers for each team
-  #     paste(
-  #       sapply(match$goals1, function(g) paste(g$name, "(", g$minute, ".)", sep = "")),
-  #       collapse = ", "
-  #     ),
-  #     paste(
-  #       sapply(match$goals2, function(g) paste(g$name, "(", g$minute, ".)", sep = "")),
-  #       collapse = ", "
-  #     ),
-  #     match$group
-  #   )
-  #   print(match_data)
-  #   # add match data to the data frame
-  #   df <- rbind(df, match_data)
-  #   # clear match_data
-  #   match_data <- NULL
-  # }
-  # matches$num
-  # str(matches)
-  # length(matches)
-  # for (j in seq_len(nrow(euro2024_data$rounds$matches[i]))) {
-  #   match <- euro2024_data$rounds[i]$matches[j]
-  #   print(match)
-  #   # extract match data
-  #   match_data <- c(
-  #     euro2024_data$rounds$name[i],
-  #     match$date,
-  #     match$time,
-  #     match$team1$name,
-  #     match$team2$name,
-  #     paste(match$score$ft),
-  #     paste(match$score$ht),
-  #     # paste the goal scorers for each team
-  #     paste(
-  #       sapply(match$goals1, function(g) paste(g$name, "(", g$minute, ".)", sep = "")),
-  #       collapse = ", "
-  #     ),
-  #     paste(
-  #       sapply(match$goals2, function(g) paste(g$name, "(", g$minute, ".)", sep = "")),
-  #       collapse = ", "
-  #     ),
-  #     match$group
-  #   )
-  #   print(match_data)
-  #   # add match data to the data frame
-  #   df <- rbind(df, match_data)
-  #   # clear match_data
-  #   match_data <- NULL
-  # }
