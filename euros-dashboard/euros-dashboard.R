@@ -2,6 +2,7 @@ rm(list = ls())
 
 library(shiny)
 library(shinydashboard)
+library(bs4Dash)
 library(leaflet)
 library(jsonlite)
 library(dplyr)
@@ -99,8 +100,9 @@ stadiums <- data.frame(
 )
 
 ui <- dashboardPage(
-  dashboardHeader(title = "Euro 2024 Dashboard"),
+  dashboardHeader(skin = "light", title <- dashboardBrand(title = "Euro 2024 Dashboard", image = "https://cdn.vectorstock.com/i/1000v/09/43/official-uefa-euro-2024-logo-vector-47540943.jpg")),
   dashboardSidebar(
+    skin = "light",
     sidebarMenu(
       menuItem("Matches", tabName = "matches", icon = icon("table")),
       menuItem("Goals Scored", tabName = "goals", icon = icon("futbol")),
@@ -126,7 +128,11 @@ ui <- dashboardPage(
                 box(title = "Select Team", width = 4,
                     selectInput("team", "Team:", choices = c("All Teams", unique(matches$team1), unique(matches$team2))))))
     )
-  )
+  ),
+  footer = dashboardFooter(
+    left = a("Source Code", href = "https://github.com/kane17/shiny-euros", target = "_blank"),
+    right = "2024 © Keijo Nierula, BFH"
+  ),
 )
 
 server <- function(input, output) {
