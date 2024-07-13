@@ -1,6 +1,8 @@
 # shiny-euros
 Shinydashboard to display stats and scores from the euros 2024
 
+Link to deployed app: https://keijo-nierula.shinyapps.io/euros-dashboard/
+
 ## How to deploy to shinyapps.io
 
 
