@@ -1,5 +1,6 @@
 rm(list = ls())
 
+# Load necessary libraries
 library(shiny)
 library(shinydashboard)
 library(bs4Dash)
@@ -20,7 +21,6 @@ response <- GET(url)
 json_data <- data.frame()
 json_data <- content(response, "text")
 euro2024_data <- fromJSON(json_data)
-str(euro2024_data)
 
 # Extract the matches data from the JSON
 matches <- bind_rows(lapply(1:nrow(euro2024_data$rounds), function(i) {
@@ -29,11 +29,6 @@ matches <- bind_rows(lapply(1:nrow(euro2024_data$rounds), function(i) {
   round_matches$round <- round_name
   round_matches
 }))
-
-# TODO:
-# - add other theme
-# - cleanup the code
-# - cleanup gui (match details order of columns, etc.)
 
 # Prepare data for plotting goals per matchday
 goals_per_matchday <- matches %>%
@@ -91,7 +86,7 @@ frankfurt <- paste0(sep = "<br/>",
   "<p>Capacity: 58,000</p>"
 )
 
-# add all stadiums to a data frame
+# add all stadiums to a data frame with coordinates
 stadiums <- data.frame(
   name = c("Olympiastadion Berlin", "Volksparkstadion Hamburg", "Allianz Arena München", "RheinEnergieStadion Köln", "MHPArena Stuttgart", "Westfalenstadion Dortmund", "Veltins-Arena Gelsenkirchen", "Deutsche Bank Park Frankfurt"),
   lat = c(52.514723875882744, 53.58726575460459, 48.21888595608705, 50.933579198726086, 48.79228744165338, 51.49275243012903, 51.554681003159295, 50.06868052596206),
@@ -99,8 +94,11 @@ stadiums <- data.frame(
   popupText = c(berlin, hamburg, munich, cologne, stuttgart, dortmund, gelsenkirchen, frankfurt)
 )
 
+# Initialize the shiny UI
 ui <- dashboardPage(
-  dashboardHeader(skin = "light", title <- dashboardBrand(title = "Euro 2024 Dashboard", image = "https://cdn.vectorstock.com/i/1000v/09/43/official-uefa-euro-2024-logo-vector-47540943.jpg")),
+  # Header with custom image
+  dashboardHeader(skin = "light", title <- dashboardBrand(title = "Euro 2024 Dashboard",
+   image = "https://cdn.vectorstock.com/i/1000v/09/43/official-uefa-euro-2024-logo-vector-47540943.jpg")),
   dashboardSidebar(
     skin = "light",
     sidebarMenu(
@@ -126,7 +124,8 @@ ui <- dashboardPage(
                 box(title = "Goals Scored Per Matchday", width = 12, 
                     plotOutput("goals_plot")),
                 box(title = "Select Team", width = 4,
-                    selectInput("team", "Team:", choices = c("All Teams", unique(matches$team1), unique(matches$team2))))))
+                    selectInput("team", "Team:", choices = c("All Teams",
+                     unique(matches$team1), unique(matches$team2))))))
     )
   ),
   footer = dashboardFooter(
@@ -140,15 +139,16 @@ server <- function(input, output) {
   matches_df <- matches %>%
     mutate(date = as.Date(date),
             team1 = sapply(team1$name, identity),
-            team2 = sapply(team2$name, identity),
             score = sapply(score$ft, function(x) paste(x, collapse = "-")),
+            team2 = sapply(team2$name, identity),
             goals1 = sapply(goals1, function(x) paste(sapply(x$name, identity), collapse = ", ")),
             goals2 = sapply(goals2, function(x) paste(sapply(x$name, identity), collapse = ", "))) %>%
-    select(round, date, team1, team2, score, goals1, goals2)
+    select(round, date, team1, score, team2, goals1, goals2)
 
   # Render the matches table
   output$matches_table <- DT::renderDataTable({
-    DT::datatable(matches_df, options = list(pageLength = 10))
+    DT::datatable(matches_df, options = list(pageLength = 10), 
+    colnames = c("Round", "Date", "Team 1", "Score", "Team 2", "Goals Team 1", "Goals Team 2"))
   })
 
   # Render the leaflet map with stadium locations
@@ -182,6 +182,7 @@ server <- function(input, output) {
     if (nrow(plot_data) == 0) {
       return(NULL)
     }
+    plot_data$round <- factor(plot_data$round, levels = c("Matchday 1", "Matchday 2", "Matchday 3", "Round of 16", "Quarter-finals", "Semi-finals", "Final"))
     ggplot(plot_data, aes(x = round, y = goals)) +
       geom_bar(stat = "identity") +
       labs(title = "Goals Scored Per Matchday",

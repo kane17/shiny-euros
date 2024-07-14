@@ -1,5 +1,5 @@
 # shiny-euros
-Shinydashboard to display stats and scores from the euros 2024
+Shinydashboard to display stats and scores from the euros 2024 for module SBD1 at BFH.
 
 Link to deployed app: https://keijo-nierula.shinyapps.io/euros-dashboard/
 
